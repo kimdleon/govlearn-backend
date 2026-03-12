@@ -421,7 +421,7 @@ model CourseWishlist {
 // ---------- WEBINARS ----------
 model AssessmentResult {
   id           String     @id @default(cuid())
-  user         User       @relation(fields: [userId], references: [id])
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId       String
   assessment   Assessment @relation(fields: [assessmentId], references: [id])
   assessmentId String
@@ -483,7 +483,7 @@ model Webinar {
 
 model Registration {
   id          String              @id @default(cuid())
-  user        User                @relation(fields: [userId], references: [id])
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId      String
   webinar     Webinar             @relation(fields: [webinarId], references: [id])
   webinarId   String
