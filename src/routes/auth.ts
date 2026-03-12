@@ -8,13 +8,16 @@ const router = Router();
 
 // Email transporter setup
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
+  host: process.env.SMTP_HOST || 'smtp.hostinger.com',
   port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: false,
+  secure: false, // Use STARTTLS
+  requireTLS: true,
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASSWORD,
   },
+  logger: true, // Enable logging for debugging
+  debug: true, // Show debug output
 });
 
 // Generate verification code
@@ -67,19 +70,21 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
 
     // Send verification email
     try {
-      await transporter.sendMail({
-        from: process.env.SMTP_FROM_EMAIL,
+      console.log('[AUTH/SIGNUP] Attempting to send verification email to:', email);
+      const emailResult = await transporter.sendMail({
+        from: process.env.SMTP_FROM_EMAIL || 'govlearn@virtual-mentors.com',
         to: email,
         subject: 'Verify your GovLearn account',
         html: `
           <h2>Welcome to GovLearn!</h2>
           <p>Hi ${name},</p>
           <p>Please verify your email address by entering the code below:</p>
-          <h3>${verificationCode}</h3>
+          <h3 style="font-size: 24px; font-weight: bold; letter-spacing: 3px;">${verificationCode}</h3>
           <p>This code will expire in 24 hours.</p>
           <p>If you didn't create this account, please ignore this email.</p>
         `,
       });
+      console.log('[AUTH/SIGNUP] Email sent successfully:', emailResult.messageId);
     } catch (emailError) {
       console.error('[AUTH/SIGNUP] Email send error:', emailError);
       // Continue anyway - user can request code resend
@@ -88,6 +93,8 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
     res.status(201).json({
       message: 'Signup successful. Please verify your email.',
       user,
+      // For development/testing - remove this in production!
+      verificationCode: process.env.NODE_ENV === 'development' ? verificationCode : undefined,
       requiresVerification: true,
     });
   } catch (error) {
