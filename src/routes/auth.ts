@@ -106,29 +106,38 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
 // POST /api/auth/login
 router.post('/login', async (req: Request, res: Response): Promise<void> => {
   try {
+    console.log('[LOGIN] 🔐 Login attempt received');
     const { email, password } = req.body;
 
     if (!email || !password) {
+      console.log('[LOGIN] ❌ Missing email or password');
       res.status(400).json({ error: 'Email and password required' });
       return;
     }
 
+    console.log(`[LOGIN] 🔍 Looking up user: ${email}`);
     const user = await db.user.findUnique({
       where: { email },
     });
 
     if (!user) {
+      console.log(`[LOGIN] ❌ User not found: ${email}`);
       res.status(401).json({ error: 'Invalid credentials' });
       return;
     }
 
+    console.log(`[LOGIN] ✅ User found: ${user.email}`);
+    console.log(`[LOGIN] 🔐 Verifying password...`);
     const isPasswordValid = await verifyPassword(password, user.password);
 
     if (!isPasswordValid) {
+      console.log(`[LOGIN] ❌ Invalid password for ${email}`);
       res.status(401).json({ error: 'Invalid credentials' });
       return;
     }
 
+    console.log(`[LOGIN] ✅ Password valid`);
+    console.log(`[LOGIN] 🎫 Generating tokens...`);
     const accessToken = generateAccessToken({
       userId: user.id,
       email: user.email,
@@ -139,6 +148,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       email: user.email,
     });
 
+    console.log(`[LOGIN] 💾 Updating user record...`);
     // Update refresh token and last login
     await db.user.update({
       where: { id: user.id },
@@ -148,6 +158,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       },
     });
 
+    console.log(`[LOGIN] ✅ Login successful for ${email}`);
     res.json({
       user: {
         id: user.id,
@@ -159,7 +170,11 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       refreshToken,
     });
   } catch (error) {
-    console.error('[AUTH/LOGIN]', error);
+    console.error('[LOGIN] 💥 ERROR:', error);
+    if (error instanceof Error) {
+      console.error('[LOGIN] Error message:', error.message);
+      console.error('[LOGIN] Error stack:', error.stack);
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -17,6 +17,9 @@ import paymentRoutes from './routes/payments';
 // Load environment variables
 dotenv.config();
 
+console.log('🚀 [STARTUP] Starting backend server...');
+console.log(`📊 [DATABASE] Connecting to: ${process.env.DATABASE_URL?.split('@')[1]?.split('/')[0] || 'unknown'}`);
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -37,18 +40,35 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Request logging middleware
+// Enhanced request logging middleware
 app.use((req: Request, res: Response, next: NextFunction) => {
-  console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
+  const timestamp = new Date().toISOString();
+  const method = req.method;
+  const path = req.path;
+  
+  console.log(`[${timestamp}] 📨 ${method} ${path}`);
+  
+  // Log request body for POST/PATCH requests
+  if ((method === 'POST' || method === 'PATCH' || method === 'DELETE') && req.body) {
+    console.log(`[${timestamp}] 📦 Body:`, JSON.stringify(req.body).substring(0, 100));
+  }
+
+  // Log response
+  res.on('finish', () => {
+    console.log(`[${timestamp}] ✅ ${method} ${path} → ${res.statusCode}`);
+  });
+
   next();
 });
 
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
+  console.log('[HEALTH] Backend is healthy');
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
 // API Routes
+console.log('🛣️  [ROUTES] Registering API routes...');
 app.use('/api/auth', authRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/webinars', webinarRoutes);
@@ -58,6 +78,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/learning-paths', learningPathRoutes);
 app.use('/api/organizations', organizationRoutes);
 app.use('/api/payments', paymentRoutes);
+console.log('✅ [ROUTES] All API routes registered');
 
 // 404 handler
 app.use((req: Request, res: Response) => {
@@ -66,7 +87,12 @@ app.use((req: Request, res: Response) => {
 
 // Error handling middleware
 app.use((err: any, req: Request, res: Response) => {
-  console.error('Error:', err);
+  console.error('❌ [ERROR]', {
+    message: err.message,
+    status: err.status,
+    url: `${req.method} ${req.path}`,
+    stack: err.stack,
+  });
   res.status(err.status || 500).json({
     error: err.message || 'Internal Server Error',
   });
