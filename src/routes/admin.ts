@@ -91,6 +91,40 @@ router.post('/users', authenticateToken, async (req: AuthRequest, res: Response)
   }
 });
 
+// DELETE /api/admin/users (Bulk delete)
+router.delete('/users', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!(await isAdmin(req, res))) return;
+
+    const { userIds } = req.body;
+
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      res.status(400).json({ error: 'userIds must be a non-empty array' });
+      return;
+    }
+
+    // Don't allow deleting your own account
+    const currentUserId = req.user?.userId;
+    if (userIds.includes(currentUserId)) {
+      res.status(400).json({ error: 'Cannot delete your own account' });
+      return;
+    }
+
+    const result = await db.user.deleteMany({
+      where: {
+        id: {
+          in: userIds,
+        },
+      },
+    });
+
+    res.json({ deletedCount: result.count });
+  } catch (error) {
+    console.error('[ADMIN/USERS/BULK_DELETE]', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/admin/speakers
 router.get('/speakers', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -167,6 +201,30 @@ router.patch('/speakers/:speakerId', authenticateToken, async (req: AuthRequest,
     res.json(speaker);
   } catch (error) {
     console.error('[ADMIN/SPEAKERS/UPDATE]', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/admin/webinars
+router.get('/webinars', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!(await isAdmin(req, res))) return;
+
+    const webinars = await db.webinar.findMany({
+      include: {
+        speakers: {
+          select: { id: true, name: true },
+        },
+        registrations: {
+          select: { id: true, status: true },
+        },
+      },
+      orderBy: { sessionDate: 'desc' },
+    });
+
+    res.json(webinars);
+  } catch (error) {
+    console.error('[ADMIN/WEBINARS]', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
