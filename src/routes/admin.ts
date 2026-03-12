@@ -94,22 +94,31 @@ router.post('/users', authenticateToken, async (req: AuthRequest, res: Response)
 // DELETE /api/admin/users (Bulk delete)
 router.delete('/users', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    console.log('[ADMIN/BULK_DELETE] 🗑️  Bulk delete request received');
+    console.log('[ADMIN/BULK_DELETE] Request body:', req.body);
+    
     if (!(await isAdmin(req, res))) return;
 
     const { userIds } = req.body;
+    console.log('[ADMIN/BULK_DELETE] User IDs to delete:', userIds);
 
     if (!Array.isArray(userIds) || userIds.length === 0) {
+      console.log('[ADMIN/BULK_DELETE] ❌ Invalid userIds - not an array or empty');
       res.status(400).json({ error: 'userIds must be a non-empty array' });
       return;
     }
 
+    console.log(`[ADMIN/BULK_DELETE] ✅ Received ${userIds.length} user IDs to delete`);
+
     // Don't allow deleting your own account
     const currentUserId = req.user?.userId;
     if (userIds.includes(currentUserId)) {
+      console.log('[ADMIN/BULK_DELETE] ❌ Attempted to delete own account');
       res.status(400).json({ error: 'Cannot delete your own account' });
       return;
     }
 
+    console.log('[ADMIN/BULK_DELETE] 🔍 Executing deleteMany query...');
     const result = await db.user.deleteMany({
       where: {
         id: {
@@ -118,9 +127,14 @@ router.delete('/users', authenticateToken, async (req: AuthRequest, res: Respons
       },
     });
 
+    console.log(`[ADMIN/BULK_DELETE] ✅ Successfully deleted ${result.count} users`);
     res.json({ deletedCount: result.count });
   } catch (error) {
-    console.error('[ADMIN/USERS/BULK_DELETE]', error);
+    console.error('[ADMIN/BULK_DELETE] 💥 ERROR:', error);
+    if (error instanceof Error) {
+      console.error('[ADMIN/BULK_DELETE] Message:', error.message);
+      console.error('[ADMIN/BULK_DELETE] Stack:', error.stack);
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });
