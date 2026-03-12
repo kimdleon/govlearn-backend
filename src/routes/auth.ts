@@ -25,8 +25,19 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password, name, contact, country, industry, jobRole, company } = req.body;
 
+    console.log('[AUTH/SIGNUP] 📝 Signup attempt for:', email);
+
     if (!email || !password || !name) {
+      console.log('[AUTH/SIGNUP] ❌ Missing required fields');
       res.status(400).json({ error: 'Missing required fields' });
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      console.log('[AUTH/SIGNUP] ❌ Invalid email format:', email);
+      res.status(400).json({ error: 'Invalid email format' });
       return;
     }
 
@@ -36,6 +47,7 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
     });
 
     if (existingUser) {
+      console.log('[AUTH/SIGNUP] ❌ User already exists:', email);
       res.status(409).json({ error: 'User already exists' });
       return;
     }
@@ -61,6 +73,9 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
       },
     });
 
+    console.log('[AUTH/SIGNUP] ✅ User created:', email);
+    console.log('[AUTH/SIGNUP] 📧 Sending welcome email to:', email);
+
     // Send welcome email asynchronously (don't wait for it)
     transporter.sendMail({
       from: process.env.SMTP_FROM_EMAIL || 'govlearn@virtual-mentors.com',
@@ -73,18 +88,17 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
         <p>If you didn't create this account, please ignore this email.</p>
       `,
     }).then((result) => {
-      console.log('[AUTH/SIGNUP] Email sent successfully:', result.messageId);
+      console.log('[AUTH/SIGNUP] ✅ Email queued successfully:', result.messageId, 'to:', email);
     }).catch((emailError) => {
-      console.error('[AUTH/SIGNUP] Email send error:', emailError);
-      // Continue anyway - user can still log in
+      console.error('[AUTH/SIGNUP] ⚠️ Email send error for', email, ':', emailError.message);
     });
 
     res.status(201).json({
-      message: 'Signup successful. You can now log in.',
+      message: 'Signup successful. You can now log in. Check your email for a welcome message.',
       user,
     });
   } catch (error) {
-    console.error('[AUTH/SIGNUP]', error);
+    console.error('[AUTH/SIGNUP] ❌ Error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
