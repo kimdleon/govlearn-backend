@@ -2,8 +2,25 @@ import { Router, Request, Response } from 'express';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { db } from '../lib/db';
 import { hashPassword, verifyPassword, generateAccessToken, generateRefreshToken } from '../lib/auth';
+import nodemailer from 'nodemailer';
 
 const router = Router();
+
+// Email transporter setup
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: parseInt(process.env.SMTP_PORT || '587'),
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASSWORD,
+  },
+});
+
+// Generate verification code
+function generateVerificationCode(): string {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
 
 // POST /api/auth/signup
 router.post('/signup', async (req: Request, res: Response): Promise<void> => {
@@ -26,6 +43,7 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
     }
 
     const hashedPassword = await hashPassword(password);
+    const verificationCode = generateVerificationCode();
 
     const user = await db.user.create({
       data: {
@@ -36,6 +54,8 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
         country,
         company,
         jobRole,
+        verificationCode,
+        emailVerified: false,
         role: 'LEARNER',
       },
       select: {
@@ -45,19 +65,30 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
       },
     });
 
-    const accessToken = generateAccessToken({ userId: user.id, email: user.email });
-    const refreshToken = generateRefreshToken({ userId: user.id, email: user.email });
-
-    // Store refresh token (optional)
-    await db.user.update({
-      where: { id: user.id },
-      data: { refreshToken },
-    });
+    // Send verification email
+    try {
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM_EMAIL,
+        to: email,
+        subject: 'Verify your GovLearn account',
+        html: `
+          <h2>Welcome to GovLearn!</h2>
+          <p>Hi ${name},</p>
+          <p>Please verify your email address by entering the code below:</p>
+          <h3>${verificationCode}</h3>
+          <p>This code will expire in 24 hours.</p>
+          <p>If you didn't create this account, please ignore this email.</p>
+        `,
+      });
+    } catch (emailError) {
+      console.error('[AUTH/SIGNUP] Email send error:', emailError);
+      // Continue anyway - user can request code resend
+    }
 
     res.status(201).json({
+      message: 'Signup successful. Please verify your email.',
       user,
-      accessToken,
-      refreshToken,
+      requiresVerification: true,
     });
   } catch (error) {
     console.error('[AUTH/SIGNUP]', error);
@@ -181,6 +212,74 @@ router.post('/logout', authenticateToken, async (req: AuthRequest, res: Response
     res.json({ message: 'Logged out successfully' });
   } catch (error) {
     console.error('[AUTH/LOGOUT]', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/auth/verify-email
+router.post('/verify-email', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, verificationCode } = req.body;
+
+    if (!email || !verificationCode) {
+      res.status(400).json({ error: 'Email and verification code required' });
+      return;
+    }
+
+    const user = await db.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    if (user.verificationCode !== verificationCode) {
+      res.status(400).json({ error: 'Invalid verification code' });
+      return;
+    }
+
+    // Mark email as verified and clear code
+    const updatedUser = await db.user.update({
+      where: { id: user.id },
+      data: {
+        emailVerified: true,
+        verificationCode: null,
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+      },
+    });
+
+    // Generate tokens
+    const accessToken = generateAccessToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+    });
+    const refreshToken = generateRefreshToken({
+      userId: user.id,
+      email: user.email,
+    });
+
+    // Store refresh token
+    await db.user.update({
+      where: { id: user.id },
+      data: { refreshToken },
+    });
+
+    res.json({
+      message: 'Email verified successfully',
+      user: updatedUser,
+      accessToken,
+      refreshToken,
+    });
+  } catch (error) {
+    console.error('[AUTH/VERIFY_EMAIL]', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
