@@ -65,7 +65,6 @@ model User {
   email          String        @unique
   password       String
   emailVerified  Boolean       @default(false)
-  verificationCode String?
   refreshToken   String?
   lastLogin      DateTime?
   
