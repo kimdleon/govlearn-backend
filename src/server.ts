@@ -23,18 +23,26 @@ console.log(`📊 [DATABASE] Connecting to: ${process.env.DATABASE_URL?.split('@
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// CORS Origins
-const corsOrigins = [
+// CORS Origins - allow all origins in development, restrict in production
+const corsOriginsList: string[] = [
   'http://localhost:3000',
   'https://govlearn.ph',
   'https://www.govlearn.ph',
-  process.env.NEXT_PUBLIC_APP_URL || 'https://govlearn.ph'
+  'https://vm-lms.onrender.com',
+  'https://govlearn-frontend.onrender.com',
+  process.env.NEXT_PUBLIC_APP_URL || ''
 ].filter(Boolean);
+
+const corsOrigins = process.env.NODE_ENV === 'production' 
+  ? corsOriginsList
+  : true; // Allow all in development
 
 // Middleware
 app.use(cors({
   origin: corsOrigins,
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
 app.use(express.json());
@@ -102,5 +110,6 @@ app.use((err: any, req: Request, res: Response) => {
 app.listen(PORT, () => {
   console.log(`🚀 Backend server running on port ${PORT}`);
   console.log(`📡 Environment: ${process.env.NODE_ENV}`);
-  console.log(`🌐 CORS enabled for: ${corsOrigins.join(', ')}`);
+  const corsDisplayText = corsOrigins === true ? 'All origins (development)' : corsOriginsList.join(', ');
+  console.log(`🌐 CORS enabled for: ${corsDisplayText}`);
 });

@@ -61,25 +61,23 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
       },
     });
 
-    // Send welcome email
-    try {
-      console.log('[AUTH/SIGNUP] Attempting to send welcome email to:', email);
-      const emailResult = await transporter.sendMail({
-        from: process.env.SMTP_FROM_EMAIL || 'govlearn@virtual-mentors.com',
-        to: email,
-        subject: 'Welcome to GovLearn!',
-        html: `
-          <h2>Welcome to GovLearn!</h2>
-          <p>Hi ${name},</p>
-          <p>Your account has been created successfully. You can now log in to access our webinars and courses.</p>
-          <p>If you didn't create this account, please ignore this email.</p>
-        `,
-      });
-      console.log('[AUTH/SIGNUP] Email sent successfully:', emailResult.messageId);
-    } catch (emailError) {
+    // Send welcome email asynchronously (don't wait for it)
+    transporter.sendMail({
+      from: process.env.SMTP_FROM_EMAIL || 'govlearn@virtual-mentors.com',
+      to: email,
+      subject: 'Welcome to GovLearn!',
+      html: `
+        <h2>Welcome to GovLearn!</h2>
+        <p>Hi ${name},</p>
+        <p>Your account has been created successfully. You can now log in to access our webinars and courses.</p>
+        <p>If you didn't create this account, please ignore this email.</p>
+      `,
+    }).then((result) => {
+      console.log('[AUTH/SIGNUP] Email sent successfully:', result.messageId);
+    }).catch((emailError) => {
       console.error('[AUTH/SIGNUP] Email send error:', emailError);
       // Continue anyway - user can still log in
-    }
+    });
 
     res.status(201).json({
       message: 'Signup successful. You can now log in.',
