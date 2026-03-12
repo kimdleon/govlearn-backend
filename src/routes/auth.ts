@@ -3,6 +3,7 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { db } from '../lib/db';
 import { hashPassword, verifyPassword, generateAccessToken, generateRefreshToken } from '../lib/auth';
 import nodemailer from 'nodemailer';
+import crypto from 'crypto';
 
 const router = Router();
 
@@ -19,6 +20,11 @@ const transporter = nodemailer.createTransport({
   logger: true, // Enable logging for debugging
   debug: true, // Show debug output
 });
+
+// Helper function to generate verification code
+function generateVerificationCode(): string {
+  return crypto.randomBytes(3).toString('hex').toUpperCase();
+}
 
 // POST /api/auth/signup
 router.post('/signup', async (req: Request, res: Response): Promise<void> => {
@@ -53,6 +59,7 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
     }
 
     const hashedPassword = await hashPassword(password);
+    const verificationCode = generateVerificationCode();
 
     const user = await db.user.create({
       data: {
@@ -74,28 +81,34 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
     });
 
     console.log('[AUTH/SIGNUP] ✅ User created:', email);
-    console.log('[AUTH/SIGNUP] 📧 Sending welcome email to:', email);
+    console.log('[AUTH/SIGNUP] 🔐 Generated verification code:', verificationCode);
+    console.log('[AUTH/SIGNUP] 📧 Sending verification email to:', email);
 
-    // Send welcome email asynchronously (don't wait for it)
+    // Send verification code email asynchronously
     transporter.sendMail({
       from: process.env.SMTP_FROM_EMAIL || 'govlearn@virtual-mentors.com',
       to: email,
-      subject: 'Welcome to GovLearn!',
+      subject: 'GovLearn - Verification Code',
       html: `
         <h2>Welcome to GovLearn!</h2>
         <p>Hi ${name},</p>
-        <p>Your account has been created successfully. You can now log in to access our webinars and courses.</p>
-        <p>If you didn't create this account, please ignore this email.</p>
+        <p>Your verification code is:</p>
+        <h3 style="font-family: monospace; font-size: 24px; letter-spacing: 2px; color: #0066cc;">${verificationCode}</h3>
+        <p>This code is valid for 10 minutes. Do not share this code with anyone.</p>
+        <p>If you didn't request this code, please ignore this email.</p>
       `,
     }).then((result) => {
-      console.log('[AUTH/SIGNUP] ✅ Email queued successfully:', result.messageId, 'to:', email);
+      console.log('[AUTH/SIGNUP] ✅ Verification email sent:', result.messageId, 'to:', email);
     }).catch((emailError) => {
       console.error('[AUTH/SIGNUP] ⚠️ Email send error for', email, ':', emailError.message);
     });
 
+    // In development, include code in response for testing
+    const isDevMode = process.env.NODE_ENV !== 'production';
     res.status(201).json({
-      message: 'Signup successful. You can now log in. Check your email for a welcome message.',
+      message: 'Account created. A verification code has been sent to your email.',
       user,
+      ...(isDevMode && { verificationCode }),
     });
   } catch (error) {
     console.error('[AUTH/SIGNUP] ❌ Error:', error);
