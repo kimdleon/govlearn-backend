@@ -21,7 +21,7 @@ console.log('🚀 [STARTUP] Starting backend server...');
 console.log(`📊 [DATABASE] Connecting to: ${process.env.DATABASE_URL?.split('@')[1]?.split('/')[0] || 'unknown'}`);
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 8080;
 
 // CORS Origins - allow all origins in development, restrict in production
 const corsOriginsList: string[] = [

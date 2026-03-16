@@ -23,13 +23,221 @@ const transporter = nodemailer.createTransport({
 
 // Helper function to generate verification code
 function generateVerificationCode(): string {
+  // In development, always return 123456 for easy testing
+  if (process.env.NODE_ENV !== 'production') {
+    return '123456';
+  }
+  // In production, generate random code
   return crypto.randomBytes(3).toString('hex').toUpperCase();
 }
 
-// POST /api/auth/signup
+// POST /api/auth/request-verification - Step 1: Send verification code
+router.post('/request-verification', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, password, name, contact, country, jobRole, company, studentOrProfessional } = req.body;
+
+    console.log('[REQUEST-VERIFICATION] 📝 Verification request for:', email);
+
+    if (!email || !password || !name) {
+      console.log('[REQUEST-VERIFICATION] ❌ Missing required fields');
+      res.status(400).json({ error: 'Missing required fields' });
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      console.log('[REQUEST-VERIFICATION] ❌ Invalid email format:', email);
+      res.status(400).json({ error: 'Invalid email format' });
+      return;
+    }
+
+    // Check if user already exists
+    const existingUser = await db.user.findUnique({
+      where: { email },
+    });
+
+    if (existingUser) {
+      console.log('[REQUEST-VERIFICATION] ❌ User already exists:', email);
+      res.status(409).json({ error: 'Email already registered' });
+      return;
+    }
+
+    // Generate verification code
+    const verificationCode = generateVerificationCode();
+    const verificationExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    // Hash password for storage
+    const hashedPassword = await hashPassword(password);
+
+    // Store in SignupVerification table (don't create user yet)
+    await db.signupVerification.upsert({
+      where: { email },
+      update: {
+        verificationCode,
+        verificationExpiry,
+        password: hashedPassword,
+        name,
+        contact,
+        country,
+        company,
+        jobRole,
+        studentOrProfessional,
+      },
+      create: {
+        email,
+        verificationCode,
+        verificationExpiry,
+        password: hashedPassword,
+        name,
+        contact,
+        country,
+        company,
+        jobRole,
+        studentOrProfessional,
+      },
+    });
+
+    console.log('[REQUEST-VERIFICATION] ✅ Verification code generated:', verificationCode);
+    console.log('[REQUEST-VERIFICATION] 📧 Sending verification email to:', email);
+
+    // Send verification code email
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM_EMAIL || 'govlearn@virtual-mentors.com',
+      to: email,
+      subject: 'GovLearn - Email Verification Code',
+      html: `
+        <h2>Welcome to GovLearn!</h2>
+        <p>Hi ${name},</p>
+        <p>Thank you for signing up! Please verify your email with the code below:</p>
+        <h3 style="font-family: monospace; font-size: 24px; letter-spacing: 2px; color: #0066cc;">${verificationCode}</h3>
+        <p><strong>This code is valid for 10 minutes.</strong></p>
+        <p>Do not share this code with anyone.</p>
+        <p>If you didn't request this code, please ignore this email.</p>
+      `,
+    });
+
+    console.log('[REQUEST-VERIFICATION] ✅ Verification email sent to:', email);
+
+    // Always return code in development for testing
+    const isDevMode = process.env.NODE_ENV !== 'production';
+    res.status(200).json({
+      message: 'Verification code sent to your email',
+      email,
+      ...(isDevMode && { verificationCode }),
+    });
+  } catch (error) {
+    console.error('[REQUEST-VERIFICATION] ❌ Error:', error);
+    res.status(500).json({ error: 'Failed to send verification code' });
+  }
+});
+
+// POST /api/auth/verify-and-signup - Step 2: Verify code and create account
+router.post('/verify-and-signup', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, verificationCode } = req.body;
+
+    console.log('[VERIFY-AND-SIGNUP] 🔍 Verifying code for:', email);
+
+    if (!email || !verificationCode) {
+      console.log('[VERIFY-AND-SIGNUP] ❌ Missing email or verification code');
+      res.status(400).json({ error: 'Email and verification code required' });
+      return;
+    }
+
+    // Find signup verification record
+    const verification = await db.signupVerification.findUnique({
+      where: { email },
+    });
+
+    if (!verification) {
+      console.log('[VERIFY-AND-SIGNUP] ❌ No verification record found for:', email);
+      res.status(404).json({ error: 'Verification not found. Please sign up again.' });
+      return;
+    }
+
+    // Check if code is expired
+    if (new Date() > verification.verificationExpiry) {
+      console.log('[VERIFY-AND-SIGNUP] ❌ Verification code expired for:', email);
+      await db.signupVerification.delete({ where: { email } });
+      res.status(410).json({ error: 'Verification code expired. Please sign up again.' });
+      return;
+    }
+
+    // Verify code
+    if (verification.verificationCode !== verificationCode) {
+      console.log('[VERIFY-AND-SIGNUP] ❌ Invalid verification code for:', email);
+      res.status(401).json({ error: 'Invalid verification code' });
+      return;
+    }
+
+    console.log('[VERIFY-AND-SIGNUP] ✅ Code verified for:', email);
+
+    // NOW create user account (only after verification!)
+    const user = await db.user.create({
+      data: {
+        email,
+        password: verification.password,
+        name: verification.name,
+        contact: verification.contact,
+        country: verification.country,
+        company: verification.company,
+        jobRole: verification.jobRole,
+        studentOrProfessional: verification.studentOrProfessional,
+        emailVerified: true,
+        role: 'LEARNER',
+      },
+    });
+
+    console.log('[VERIFY-AND-SIGNUP] ✅ User created:', email);
+
+    // Generate JWT tokens
+    console.log('[VERIFY-AND-SIGNUP] 🎫 Generating tokens...');
+    const accessToken = generateAccessToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+    });
+    const refreshToken = generateRefreshToken({
+      userId: user.id,
+      email: user.email,
+    });
+
+    // Update user with refresh token
+    console.log('[VERIFY-AND-SIGNUP] 💾 Saving refresh token...');
+    await db.user.update({
+      where: { id: user.id },
+      data: {
+        refreshToken,
+        lastLogin: new Date(),
+      },
+    });
+
+    // Delete verification record
+    await db.signupVerification.delete({ where: { email } });
+
+    console.log('[VERIFY-AND-SIGNUP] ✅ Account created and logged in for:', email);
+    res.status(201).json({
+      message: 'Account created successfully',
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+      accessToken,
+      refreshToken,
+    });
+  } catch (error) {
+    console.error('[VERIFY-AND-SIGNUP] ❌ Error:', error);
+    res.status(500).json({ error: 'Failed to create account' });
+  }
+});
+
+// POST /api/auth/signup (kept for backward compatibility, but redirects to two-step)
 router.post('/signup', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, password, name, contact, country, industry, jobRole, company } = req.body;
+    const { email, password, name, contact, country, jobRole, company, studentOrProfessional } = req.body;
 
     console.log('[AUTH/SIGNUP] 📝 Signup attempt for:', email);
 
@@ -70,6 +278,7 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
         country,
         company,
         jobRole,
+        studentOrProfessional,
         emailVerified: true,
         role: 'LEARNER',
       },

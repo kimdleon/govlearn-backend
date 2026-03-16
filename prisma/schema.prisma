@@ -119,6 +119,23 @@ enum Role {
   LEARNER
 }
 
+// ---------- SIGNUP VERIFICATION ----------
+model SignupVerification {
+  id                    String   @id @default(cuid())
+  email                 String   @unique
+  verificationCode      String
+  verificationExpiry    DateTime
+  password              String
+  name                  String
+  contact               String?
+  country               String?
+  company               String?
+  jobRole               String?
+  studentOrProfessional String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
 // ---------- COURSE ----------
 model Course {
   id                     String             @id @default(uuid())
