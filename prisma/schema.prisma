@@ -477,7 +477,7 @@ model Webinar {
   sessionDate    DateTime
   status         String       @default("draft") // "draft" | "published"
   speakers       Speaker[]    @relation("WebinarSpeakers")
-  tags           String[]
+  tags           Json         @default("[]")
   googleMeetLink String?
   registrations  Registration[]
   assessments    Assessment[]
@@ -538,7 +538,7 @@ model WebinarQuestion {
   assessment    Assessment @relation(fields: [assessmentId], references: [id])
   assessmentId  String
   questionText  String
-  options       String[]
+  options       Json       @default("[]")
   correctAnswer String
 }
 
