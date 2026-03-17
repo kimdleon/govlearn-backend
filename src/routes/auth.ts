@@ -217,6 +217,23 @@ router.post('/verify-and-signup', async (req: Request, res: Response): Promise<v
     await db.signupVerification.delete({ where: { email } });
 
     console.log('[VERIFY-AND-SIGNUP] ✅ Account created and logged in for:', email);
+    
+    // Set tokens as cookies so server-side code can access them
+    const isDev = process.env.NODE_ENV !== 'production';
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: !isDev,
+      sameSite: isDev ? 'none' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+    
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: !isDev,
+      sameSite: isDev ? 'none' : 'lax',
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    });
+    
     res.status(201).json({
       message: 'Account created successfully',
       user: {
@@ -381,6 +398,23 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     });
 
     console.log(`[LOGIN] ✅ Login successful for ${email}`);
+    
+    // Set tokens as cookies so server-side code can access them
+    const isDev = process.env.NODE_ENV !== 'production';
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: !isDev,
+      sameSite: isDev ? 'none' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+    
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: !isDev,
+      sameSite: isDev ? 'none' : 'lax',
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    });
+    
     res.json({
       user: {
         id: user.id,

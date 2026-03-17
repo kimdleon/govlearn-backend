@@ -13,6 +13,7 @@ import adminRoutes from './routes/admin';
 import learningPathRoutes from './routes/learning-paths';
 import organizationRoutes from './routes/organizations';
 import paymentRoutes from './routes/payments';
+import uploadthingRoutes from './routes/uploadthing';
 
 // Load environment variables
 dotenv.config();
@@ -86,6 +87,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/learning-paths', learningPathRoutes);
 app.use('/api/organizations', organizationRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/uploadthing', uploadthingRoutes);
 console.log('✅ [ROUTES] All API routes registered');
 
 // 404 handler
