@@ -1,15 +1,41 @@
 import { Router, Response } from 'express';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 
 const router = Router();
 
+// Create uploads directory if it doesn't exist
+const uploadsDir = path.join(process.cwd(), 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
 // Configure multer for file uploads
-const storage = multer.memoryStorage();
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  },
+});
+
 const upload = multer({
   storage,
   limits: {
     fileSize: 100 * 1024 * 1024, // 100MB
+  },
+  fileFilter: (req, file, cb) => {
+    // Only allow image files
+    const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
   },
 });
 
@@ -25,13 +51,12 @@ router.post(
         return;
       }
 
-      // For development, generate a mock URL
-      // In production, upload to cloud storage (S3, Cloudinary, etc.)
-      const mockUrl = `https://via.placeholder.com/600x400?text=${encodeURIComponent(req.file.originalname)}`;
+      // Generate URL for the uploaded file
+      const fileUrl = `/uploads/${req.file.filename}`;
 
-      console.log(`[UPLOADTHING] File uploaded: ${req.file.originalname}`);
+      console.log(`[UPLOADTHING] File uploaded: ${req.file.originalname} -> ${fileUrl}`);
       res.json({
-        url: mockUrl,
+        url: fileUrl,
         name: req.file.originalname,
         size: req.file.size,
       });
