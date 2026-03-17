@@ -36,7 +36,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response): Pro
 
     const {
       title,
-      slug,
+      slug: providedSlug,
       posterUrl,
       outline,
       price,
@@ -46,9 +46,22 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response): Pro
       googleMeetLink,
     } = req.body;
 
-    if (!title || !slug || !sessionDate) {
+    if (!title || !sessionDate) {
       res.status(400).json({ error: 'Missing required fields' });
       return;
+    }
+
+    // Generate unique slug - use provided slug or generate from title
+    let slug = providedSlug || title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)+/g, '');
+
+    // Check for existing slugs and append suffix if needed
+    let suffix = 1;
+    let originalSlug = slug;
+    while (await db.webinar.findUnique({ where: { slug } })) {
+      slug = `${originalSlug}-${suffix++}`;
     }
 
     const webinar = await db.webinar.create({
